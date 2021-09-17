@@ -7,6 +7,7 @@ pub struct UserInput {
     pub regex_string: String,
     pub old_term: String,
     pub new_term: String,
+    pub dry_run: bool,
 }
 
 pub trait ClapArg<'a, const I: usize> {
@@ -18,8 +19,8 @@ pub trait ClapArg<'a, const I: usize> {
     fn get_setters() -> Vec<fn(Self, &str) -> Self>;
 }
 
-impl<'a> ClapArg<'a, 3> for UserInput {
-    const ARG_NAMES: [&'a str; 3] = ["expr", "old", "new"];
+impl<'a> ClapArg<'a, 4> for UserInput {
+    const ARG_NAMES: [&'a str; 4] = ["expr", "old", "new", "dry-run"];
 
     fn get_args<'b>() -> Vec<Arg<'a, 'b>> {
         // order not important here, so we can afford to not use the arg name array
@@ -39,6 +40,12 @@ impl<'a> ClapArg<'a, 3> for UserInput {
                 .required(true)
                 .takes_value(true)
                 .index(3),
+            Arg::with_name("dry-run")
+                .help("if set, does not execute the final step of replacing the matching terms in the files")
+                .long("dry-run")
+                .required(false)
+                .takes_value(false)
+                .index(4),
         ]
     }
 
@@ -68,6 +75,10 @@ impl<'a> ClapArg<'a, 3> for UserInput {
                 this.new_term = new.to_string();
                 this
             },
+            |mut this, dry_run| {
+                this.dry_run = dry_run.parse::<bool>().unwrap();
+                this
+            },
         ]
     }
 }
@@ -90,9 +101,13 @@ mod test {
         UserInput::from_matches(&matches).is_ok()
     }
 
+    fn get_valid_input_args<'a>() -> Vec<&'a str> {
+        vec!["expr", "old", "new", "dry-run"]
+    }
+
     #[test]
     fn valid_input_should_create_valid_matches() {
-        let input = vec!["expr", "old", "new"];
+        let input = get_valid_input_args();
 
         let matches_result = get_matches_for_input(input);
         assert!(matches_result.is_ok());
@@ -101,7 +116,8 @@ mod test {
 
     #[test]
     fn invalid_input_should_fail_match_parse() {
-        let input = vec!["expr", "old", "new", "extra-arg"];
+        let mut input = get_valid_input_args();
+        input.push("extra-arg");
 
         let matches_result = get_matches_for_input(input);
         assert!(matches_result.is_err());
