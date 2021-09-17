@@ -1,5 +1,7 @@
 use clap::{Arg, ArgMatches};
 
+type ParseResult<T> = Result<T, ()>;
+
 #[derive(Default, Debug)]
 pub struct UserInput {
     pub regex_string: String,
@@ -10,7 +12,9 @@ pub struct UserInput {
 pub trait ClapArg<'a, const I: usize> {
     const ARG_NAMES: [&'a str; I];
     fn get_args<'b>() -> Vec<Arg<'a, 'b>>;
-    fn from_matches(matches: &ArgMatches) -> Self;
+    fn from_matches(matches: &ArgMatches) -> ParseResult<Self>
+    where
+        Self: Sized;
     fn get_setters() -> Vec<fn(Self, &str) -> Self>;
 }
 
@@ -38,16 +42,16 @@ impl<'a> ClapArg<'a, 3> for UserInput {
         ]
     }
 
-    fn from_matches(matches: &ArgMatches) -> Self {
-        Self::get_setters().iter().zip(Self::ARG_NAMES.iter()).fold(
-            Self::default(),
-            |acc, setter_value_tuple| {
-                let setter = setter_value_tuple.0;
-                let arg_name = setter_value_tuple.1;
-                let arg_value = matches.value_of(arg_name).unwrap();
-                setter(acc, arg_value)
-            },
-        )
+    fn from_matches(matches: &ArgMatches) -> ParseResult<Self> {
+        let mut this = Self::default();
+        for setter_value_tuple in Self::get_setters().iter().zip(Self::ARG_NAMES.iter()) {
+            let setter = setter_value_tuple.0;
+            let arg_name = setter_value_tuple.1;
+            let arg_value = matches.value_of(arg_name).ok_or_else(|| ())?;
+            this = setter(this, arg_value);
+        }
+
+        Ok(this)
     }
 
     fn get_setters() -> Vec<fn(Self, &str) -> Self> {
@@ -83,8 +87,7 @@ mod test {
     }
 
     fn check_matches_valid(matches: ArgMatches) -> bool {
-        UserInput::from_matches(&matches);
-        true
+        UserInput::from_matches(&matches).is_ok()
     }
 
     #[test]
