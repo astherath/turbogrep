@@ -1,4 +1,4 @@
-use clap::{Arg, ArgMatches};
+use clap::{self, Arg, ArgMatches};
 
 type ParseResult<T> = Result<T, ()>;
 
@@ -10,20 +10,16 @@ pub struct UserInput {
     pub dry_run: bool,
 }
 
-pub trait ClapArg<'a, const I: usize> {
-    const ARG_NAMES: [&'a str; I];
+pub trait ClapArg<'a> {
     fn get_args<'b>() -> Vec<Arg<'a, 'b>>;
     fn from_matches(matches: &ArgMatches) -> ParseResult<Self>
     where
         Self: Sized;
-    fn get_setters() -> Vec<fn(Self, &str) -> Self>;
+    fn get_setters() -> Vec<fn(Self, &ArgMatches) -> Self>;
 }
 
-impl<'a> ClapArg<'a, 4> for UserInput {
-    const ARG_NAMES: [&'a str; 4] = ["expr", "old", "new", "dry-run"];
-
+impl<'a> ClapArg<'a> for UserInput {
     fn get_args<'b>() -> Vec<Arg<'a, 'b>> {
-        // order not important here, so we can afford to not use the arg name array
         vec![
             Arg::with_name("expr")
                 .help("the regex expression to match the files for")
@@ -43,44 +39,62 @@ impl<'a> ClapArg<'a, 4> for UserInput {
             Arg::with_name("dry-run")
                 .help("if set, does not execute the final step of replacing the matching terms in the files")
                 .long("dry-run")
+                .short("dry")
+                .multiple(false)
                 .required(false)
-                .takes_value(false)
-                .index(4),
         ]
     }
 
     fn from_matches(matches: &ArgMatches) -> ParseResult<Self> {
-        let mut this = Self::default();
-        for setter_value_tuple in Self::get_setters().iter().zip(Self::ARG_NAMES.iter()) {
-            let setter = setter_value_tuple.0;
-            let arg_name = setter_value_tuple.1;
-            let arg_value = matches.value_of(arg_name).ok_or_else(|| ())?;
-            this = setter(this, arg_value);
-        }
-
-        Ok(this)
+        Ok(Self::get_setters()
+            .iter()
+            .fold(Self::default(), |acc, setter| setter(acc, matches)))
     }
 
-    fn get_setters() -> Vec<fn(Self, &str) -> Self> {
+    fn get_setters() -> Vec<fn(Self, &ArgMatches) -> Self> {
         vec![
-            |mut this, expr| {
-                this.regex_string = expr.to_string();
+            |mut this, matches| {
+                let arg_name = "expr";
+                this.regex_string = matches
+                    .value_of(arg_name)
+                    .ok_or_else(|| panic_because_of_bad_parse())
+                    .unwrap()
+                    .to_string();
                 this
             },
-            |mut this, old| {
-                this.old_term = old.to_string();
+            |mut this, matches| {
+                let arg_name = "old";
+                this.old_term = matches
+                    .value_of(arg_name)
+                    .ok_or_else(|| panic_because_of_bad_parse())
+                    .unwrap()
+                    .to_string();
                 this
             },
-            |mut this, new| {
-                this.new_term = new.to_string();
+            |mut this, matches| {
+                let arg_name = "new";
+                this.new_term = matches
+                    .value_of(arg_name)
+                    .ok_or_else(|| panic_because_of_bad_parse())
+                    .unwrap()
+                    .to_string();
                 this
             },
-            |mut this, dry_run| {
-                this.dry_run = dry_run.parse::<bool>().unwrap();
+            |mut this, matches| {
+                let arg_name = "dry-run";
+                this.dry_run = matches.is_present(arg_name);
                 this
             },
         ]
     }
+}
+
+fn panic_because_of_bad_parse() -> ! {
+    clap::Error::with_description(
+        &"Command could not be parsed or was not passed in.",
+        clap::ErrorKind::ArgumentNotFound,
+    )
+    .exit()
 }
 
 #[cfg(test)]
@@ -101,13 +115,23 @@ mod test {
         UserInput::from_matches(&matches).is_ok()
     }
 
-    fn get_valid_input_args<'a>() -> Vec<&'a str> {
-        vec!["expr", "old", "new", "dry-run"]
+    fn get_required_input_arg_values<'a>() -> Vec<&'a str> {
+        vec!["expr", "old", "new"]
     }
 
     #[test]
     fn valid_input_should_create_valid_matches() {
-        let input = get_valid_input_args();
+        let input = get_required_input_arg_values();
+
+        let matches_result = get_matches_for_input(input);
+        assert!(matches_result.is_ok());
+        assert!(check_matches_valid(matches_result.unwrap()));
+    }
+
+    #[test]
+    fn optional_dry_run_arg_should_work() {
+        let mut input = get_required_input_arg_values();
+        input.push("--dry-run=true");
 
         let matches_result = get_matches_for_input(input);
         assert!(matches_result.is_ok());
@@ -116,7 +140,7 @@ mod test {
 
     #[test]
     fn invalid_input_should_fail_match_parse() {
-        let mut input = get_valid_input_args();
+        let mut input = get_required_input_arg_values();
         input.push("extra-arg");
 
         let matches_result = get_matches_for_input(input);
