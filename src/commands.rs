@@ -4,7 +4,7 @@ type ParseResult<T> = Result<T, ()>;
 
 #[derive(Default, Debug)]
 pub struct UserInput {
-    pub regex_string: String,
+    pub pattern_string: String,
     pub old_term: String,
     pub new_term: String,
     pub dry_run: bool,
@@ -22,7 +22,7 @@ impl<'a> ClapArg<'a> for UserInput {
     fn get_args<'b>() -> Vec<Arg<'a, 'b>> {
         vec![
             Arg::with_name("expr")
-                .help("the regex expression to match the files for")
+                .help("the pattern expression to match the files for")
                 .required(true)
                 .takes_value(true)
                 .index(1),
@@ -55,7 +55,7 @@ impl<'a> ClapArg<'a> for UserInput {
         vec![
             |mut this, matches| {
                 let arg_name = "expr";
-                this.regex_string = matches
+                this.pattern_string = matches
                     .value_of(arg_name)
                     .ok_or_else(|| panic_because_of_bad_parse())
                     .unwrap()
