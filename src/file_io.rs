@@ -139,11 +139,6 @@ mod tests {
 
             assert!(lines.is_none());
         }
-
-        // fn read_file_data_and_check_for_match(
-        // file_path: &Path,
-        // statement_to_find: &str,
-        // ) -> io::Result<Option<FileData>> {
     }
 
     fn unwrap_and_check_ok<T>(result: io::Result<T>, assert_msg: &str) -> T {
