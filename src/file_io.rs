@@ -1,8 +1,8 @@
 use super::commands::UserInput;
 use glob;
 use std::fmt;
-use std::fs;
-use std::io;
+use std::fs::{self, File};
+use std::io::{self, BufRead};
 use std::path::{Path, PathBuf};
 
 pub fn execute(user_input: UserInput) -> io::Result<()> {
@@ -13,7 +13,7 @@ pub fn execute(user_input: UserInput) -> io::Result<()> {
 
     // print (nicely) the name of the file and the prev/next
     for file_path in file_paths.iter() {
-        let possible_data = read_file_data_and_check_for_match(file_path);
+        let possible_data = read_file_data_and_check_for_match(file_path, &user_input.old_term)?;
         if let Some(file_data) = possible_data {
             let changes_to_be_made = read_and_print_changes_to_be_made(&file_data)?;
             if !user_input.dry_run {
@@ -50,7 +50,6 @@ fn get_file_paths_that_match_expr(expr: &str, starting_path: &Path) -> io::Resul
         }
     };
 
-    // XXX: careful with this fn
     fn visit_dirs(dir: &Path, cb: &mut dyn FnMut(&fs::DirEntry)) -> io::Result<()> {
         if dir.is_dir() {
             for entry in fs::read_dir(dir)? {
@@ -87,7 +86,7 @@ mod tests {
                 "result from parsing dirs should not be err",
             );
 
-            assert!(files.len() > 0);
+            assert!(!files.is_empty());
         }
 
         #[test]
@@ -99,7 +98,7 @@ mod tests {
                 "result from parsing dirs should not be err",
             );
 
-            assert!(files.len() > 0);
+            assert!(!files.is_empty());
 
             let pattern = glob::Pattern::new(expr).unwrap();
             files.into_iter().for_each(|path| {
@@ -111,15 +110,76 @@ mod tests {
         }
     }
 
+    mod file_reader {
+        use super::*;
+
+        #[test]
+        fn data_from_file_should_be_some() {
+            let path = Path::new("Cargo.toml");
+            let statement_to_find = " ";
+
+            let lines = unwrap_and_check_ok(
+                read_file_data_and_check_for_match(&path, statement_to_find),
+                "reading file data for valid path should not return err",
+            );
+
+            assert!(lines.is_some());
+            assert!(!lines.unwrap().contents.is_empty());
+        }
+
+        #[test]
+        fn data_from_file_with_non_match_should_be_none() {
+            let path = Path::new("Cargo.toml");
+            let nonexistent_statement = "nonexistent_substring".repeat(10);
+
+            let lines = unwrap_and_check_ok(
+                read_file_data_and_check_for_match(&path, &nonexistent_statement),
+                "reading file data for valid path should not return err",
+            );
+
+            assert!(lines.is_none());
+        }
+
+        // fn read_file_data_and_check_for_match(
+        // file_path: &Path,
+        // statement_to_find: &str,
+        // ) -> io::Result<Option<FileData>> {
+    }
+
     fn unwrap_and_check_ok<T>(result: io::Result<T>, assert_msg: &str) -> T {
         assert!(result.is_ok(), "{}", assert_msg);
         result.unwrap()
     }
 }
 
-struct FileData;
-fn read_file_data_and_check_for_match(file_path: &Path) -> Option<FileData> {
-    None
+struct FileData {
+    pub file_path: PathBuf,
+    pub contents: Vec<String>,
+}
+
+fn read_file_data_and_check_for_match(
+    file_path: &Path,
+    statement_to_find: &str,
+) -> io::Result<Option<FileData>> {
+    let file = File::open(file_path)?;
+    let mut has_match = false;
+    let mut contents = vec![];
+
+    for line in io::BufReader::new(file).lines().map(|x| x.unwrap()) {
+        // avoid needless `line.contains()` calls
+        if !has_match && line.contains(statement_to_find) {
+            has_match = true;
+        }
+        contents.push(line);
+    }
+
+    Ok(match has_match {
+        true => Some(FileData {
+            file_path: file_path.to_path_buf(),
+            contents,
+        }),
+        false => None,
+    })
 }
 
 fn read_and_print_changes_to_be_made(file_data: &FileData) -> io::Result<FileChanges> {
