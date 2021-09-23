@@ -1,5 +1,6 @@
 use super::commands::UserInput;
 use glob;
+use std::cmp;
 use std::fmt;
 use std::fs::{self, File};
 use std::io::{self, BufRead};
@@ -15,7 +16,7 @@ pub fn execute(user_input: UserInput) -> io::Result<()> {
     for file_path in file_paths.iter() {
         let possible_data = read_file_data_and_check_for_match(file_path, &user_input.old_term)?;
         if let Some(file_data) = possible_data {
-            let changes_to_be_made = read_and_print_changes_to_be_made(&file_data)?;
+            let changes_to_be_made = FileChanges::from_file_data(&file_data, &user_input.old_term);
             if !user_input.dry_run {
                 execute_changes_to_file(&file_data, changes_to_be_made)?;
             }
@@ -30,8 +31,6 @@ pub fn execute(user_input: UserInput) -> io::Result<()> {
 
     Ok(())
 }
-
-struct FileChanges;
 
 fn get_file_paths_that_match_expr(expr: &str, starting_path: &Path) -> io::Result<Vec<PathBuf>> {
     let matches_pattern = |path: &Path| -> bool {
@@ -118,13 +117,16 @@ mod tests {
             let path = Path::new("Cargo.toml");
             let statement_to_find = " ";
 
-            let lines = unwrap_and_check_ok(
+            let some_lines = unwrap_and_check_ok(
                 read_file_data_and_check_for_match(&path, statement_to_find),
                 "reading file data for valid path should not return err",
             );
 
-            assert!(lines.is_some());
-            assert!(!lines.unwrap().contents.is_empty());
+            assert!(some_lines.is_some());
+
+            let lines = some_lines.unwrap();
+            assert!(!lines.contents.is_empty());
+            assert!(!lines.term_containing_lines.is_empty());
         }
 
         #[test]
@@ -150,6 +152,7 @@ mod tests {
 struct FileData {
     pub file_path: PathBuf,
     pub contents: Vec<String>,
+    pub term_containing_lines: Vec<usize>,
 }
 
 fn read_file_data_and_check_for_match(
@@ -159,26 +162,69 @@ fn read_file_data_and_check_for_match(
     let file = File::open(file_path)?;
     let mut has_match = false;
     let mut contents = vec![];
+    let mut term_containing_lines = vec![];
 
+    let mut line_num = 0;
     for line in io::BufReader::new(file).lines().map(|x| x.unwrap()) {
-        // avoid needless `line.contains()` calls
-        if !has_match && line.contains(statement_to_find) {
+        if line.contains(statement_to_find) {
+            term_containing_lines.push(line_num);
             has_match = true;
         }
         contents.push(line);
+        line_num += 1;
     }
 
     Ok(match has_match {
+        false => None,
         true => Some(FileData {
             file_path: file_path.to_path_buf(),
+            term_containing_lines,
             contents,
         }),
-        false => None,
     })
 }
 
-fn read_and_print_changes_to_be_made(file_data: &FileData) -> io::Result<FileChanges> {
-    Ok(FileChanges)
+struct FileChanges {
+    lines: Vec<ParsedLine>,
+}
+
+struct ParsedLine {
+    pub num: usize,
+    pub has_term: bool,
+    pub contents: String,
+}
+
+mod file_changes {
+    // #[test]
+    // fn
+}
+
+impl FileChanges {
+    fn from_file_data(file_data: &FileData, term: &str) -> Self {
+        file_data.term_containing_lines.iter().for_each(|line_num| {
+            let offset = 2;
+            let start_index = cmp::max(line_num - 2, 0);
+            let lines = file_data.contents.iter().nth(start_index);
+        });
+        let mut line_num = 1;
+        let lines = file_data
+            .contents
+            .iter()
+            .nth(2)
+            .map(|line| {
+                let has_term = line.contains(term);
+                let num = line_num;
+                line_num += 1;
+                ParsedLine {
+                    has_term,
+                    num,
+                    contents: line.to_string(),
+                }
+            })
+            .collect();
+
+        Self { lines }
+    }
 }
 
 fn execute_changes_to_file(file_data: &FileData, changes: FileChanges) -> io::Result<()> {
