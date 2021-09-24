@@ -1,5 +1,5 @@
 use super::commands::UserInput;
-use ansi_term::Colour;
+use ansi_term::Color;
 use glob;
 use std::cmp::{Ord, Ordering};
 use std::collections::HashSet;
@@ -159,12 +159,14 @@ mod tests {
 
         #[test]
         fn lines_should_be_sorted_by_line_num_desc() {
-            let term = " ";
+            let term = ".";
             let file_data = valid_file_data();
             let changes = FileChanges::from_file_data(&file_data, term);
 
             assert!(!changes.lines.is_empty());
             assert!(changes.lines.iter().is_sorted());
+            println!("changes: {}", changes);
+            panic!()
         }
 
         #[test]
@@ -242,7 +244,39 @@ fn read_file_data_and_check_for_match(
 struct ParsedLine {
     pub num: usize,
     pub has_term: bool,
-    pub contents: String,
+    pub contents: ChangeContents,
+}
+
+#[derive(Debug, Eq, PartialEq, Hash, PartialOrd)]
+struct ChangeContents {
+    old: String,
+    new: Option<String>,
+}
+
+impl ChangeContents {
+    fn from_line(line: &str, term: &str, has_term: bool) -> Self {
+        let old = line_with_term_highlighted(line, term, Color::Red);
+        let new = match has_term {
+            true => Some(line_with_term_highlighted(line, term, Color::Green)),
+            false => None,
+        };
+        Self { old, new }
+    }
+}
+
+impl fmt::Display for ChangeContents {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let mut display_string = format!("{}", &self.old);
+        if let Some(new) = &self.new {
+            display_string.push_str(&format!(" -> {}", new))
+        }
+        write!(f, "{}", display_string)
+    }
+}
+
+fn line_with_term_highlighted(line: &str, term: &str, highlight_color: Color) -> String {
+    let colored_string = highlight_color.paint(term).to_string();
+    line.replace(term, &colored_string)
 }
 
 impl Ord for ParsedLine {
@@ -272,10 +306,7 @@ impl FileChanges {
                 .take(full_offset)
                 .for_each(|line| {
                     let has_term = line.contains(term);
-                    let contents = match has_term {
-                        true => line_with_term_highlighted(line, term),
-                        false => line.to_string(),
-                    };
+                    let contents = ChangeContents::from_line(&line, term, has_term);
                     let num = line_num;
                     line_num += 1;
                     let parsed_line = ParsedLine {
@@ -289,12 +320,27 @@ impl FileChanges {
         let mut lines = line_set.into_iter().collect::<Vec<ParsedLine>>();
         lines.sort_unstable();
 
-        fn line_with_term_highlighted(line: &str, term: &str) -> String {
-            let colored_string = Colour::Red.paint(term);
-            line.replace(term, &colored_string)
-        }
-
         Self { lines }
+    }
+}
+
+impl fmt::Display for ParsedLine {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{:>3}|  {}", self.num, self.contents)
+    }
+}
+
+impl fmt::Display for FileChanges {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(
+            f,
+            "{}",
+            self.lines
+                .iter()
+                .map(|line| line.to_string())
+                .collect::<Vec<String>>()
+                .join("\n")
+        )
     }
 }
 
