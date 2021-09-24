@@ -1,6 +1,8 @@
 use super::commands::UserInput;
 use ansi_term::Colour;
 use glob;
+use std::cmp::{Ord, Ordering};
+use std::collections::HashSet;
 use std::fmt;
 use std::fs::{self, File};
 use std::io::{self, BufRead};
@@ -153,8 +155,34 @@ mod tests {
             let changes = FileChanges::from_file_data(&file_data, term);
 
             assert!(!changes.lines.is_empty());
-            println!("changes: {:?}", changes);
-            assert!(false);
+        }
+
+        #[test]
+        fn lines_should_be_sorted_by_line_num_desc() {
+            let term = " ";
+            let file_data = valid_file_data();
+            let changes = FileChanges::from_file_data(&file_data, term);
+
+            assert!(!changes.lines.is_empty());
+            assert!(changes.lines.iter().is_sorted());
+        }
+
+        #[test]
+        fn should_not_have_any_duplicate_lines() {
+            let term = " ";
+            let file_data = valid_file_data();
+            let changes = FileChanges::from_file_data(&file_data, term);
+
+            assert!(!changes.lines.is_empty());
+            let mut line_set = HashSet::new();
+            let all_lines_inserted_non_dupe = changes
+                .lines
+                .into_iter()
+                // HashSet.insert() returns false if no insert happened,
+                // meaning that there was a duplicate entry.
+                .map(|line| line_set.insert(line))
+                .all(|x| x);
+            assert!(all_lines_inserted_non_dupe);
         }
     }
 
@@ -210,52 +238,56 @@ fn read_file_data_and_check_for_match(
     })
 }
 
-#[derive(Debug)]
+#[derive(Debug, Eq, PartialEq, Hash, PartialOrd)]
 struct ParsedLine {
     pub num: usize,
     pub has_term: bool,
     pub contents: String,
 }
 
-#[derive(Debug)]
+impl Ord for ParsedLine {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.num.cmp(&other.num)
+    }
+}
+
+#[derive(Debug, Eq, PartialEq, Hash)]
 struct FileChanges {
     lines: Vec<ParsedLine>,
 }
 
 impl FileChanges {
     fn from_file_data(file_data: &FileData, term: &str) -> Self {
-        let lines = file_data
-            .term_containing_lines
-            .iter()
-            .map(|line_num| {
-                let half_offset: usize = 2;
-                let full_offset = (half_offset * 2) + 1;
-                let start_index = line_num.checked_sub(half_offset).unwrap_or(0);
-                // we only want to take a few lines surrounding the painted one
-                let mut line_num = start_index;
-                file_data
-                    .contents
-                    .iter()
-                    .skip(start_index)
-                    .take(full_offset)
-                    .map(|line| {
-                        let has_term = line.contains(term);
-                        let contents = match has_term {
-                            true => line_with_term_highlighted(line, term),
-                            false => line.to_string(),
-                        };
-                        let num = line_num;
-                        line_num += 1;
-                        ParsedLine {
-                            has_term,
-                            num,
-                            contents,
-                        }
-                    })
-                    .collect::<Vec<ParsedLine>>()
-            })
-            .flatten()
-            .collect();
+        let mut line_set = HashSet::new();
+        file_data.term_containing_lines.iter().for_each(|line_num| {
+            let half_offset: usize = 2;
+            let full_offset = (half_offset * 2) + 1;
+            let start_index = line_num.checked_sub(half_offset).unwrap_or(0);
+            // we only want to take a few lines surrounding the painted one
+            let mut line_num = start_index;
+            file_data
+                .contents
+                .iter()
+                .skip(start_index)
+                .take(full_offset)
+                .for_each(|line| {
+                    let has_term = line.contains(term);
+                    let contents = match has_term {
+                        true => line_with_term_highlighted(line, term),
+                        false => line.to_string(),
+                    };
+                    let num = line_num;
+                    line_num += 1;
+                    let parsed_line = ParsedLine {
+                        has_term,
+                        num,
+                        contents,
+                    };
+                    line_set.insert(parsed_line);
+                });
+        });
+        let mut lines = line_set.into_iter().collect::<Vec<ParsedLine>>();
+        lines.sort_unstable();
 
         fn line_with_term_highlighted(line: &str, term: &str) -> String {
             let colored_string = Colour::Red.paint(term);
