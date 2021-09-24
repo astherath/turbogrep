@@ -8,17 +8,33 @@ use std::fs::{self, File};
 use std::io::{self, BufRead};
 use std::path::{Path, PathBuf};
 
+struct WantedChanges {
+    old: String,
+    new: String,
+}
+
+impl WantedChanges {
+    fn from_user_input(user_input: &UserInput) -> Self {
+        Self {
+            old: user_input.old_term.to_string(),
+            new: user_input.new_term.to_string(),
+        }
+    }
+}
+
 pub fn execute(user_input: UserInput) -> io::Result<()> {
     // read every file (one at a time) if it matches the pattern
 
     let init_path = Path::new(".");
     let file_paths = get_file_paths_that_match_expr(&user_input.pattern_string, &init_path)?;
 
+    let changes_requested = WantedChanges::from_user_input(&user_input);
+
     // print (nicely) the name of the file and the prev/next
     for file_path in file_paths.iter() {
-        let possible_data = read_file_data_and_check_for_match(file_path, &user_input.old_term)?;
+        let possible_data = read_file_data_and_check_for_match(file_path, &changes_requested.old)?;
         if let Some(file_data) = possible_data {
-            let changes_to_be_made = FileChanges::from_file_data(&file_data, &user_input.old_term);
+            let changes_to_be_made = FileChanges::from_file_data(&file_data, &changes_requested);
             if !user_input.dry_run {
                 execute_changes_to_file(&file_data, changes_to_be_made)?;
             }
@@ -148,20 +164,27 @@ mod tests {
     mod file_changes {
         use super::*;
 
+        fn mock_wanted_changes(term: &str) -> WantedChanges {
+            WantedChanges {
+                old: term.to_string(),
+                new: "".to_string(),
+            }
+        }
+
         #[test]
         fn should_be_able_to_create_from_file_data() {
-            let term = "=";
+            let changes_requested = mock_wanted_changes("=");
             let file_data = valid_file_data();
-            let changes = FileChanges::from_file_data(&file_data, term);
+            let changes = FileChanges::from_file_data(&file_data, &changes_requested);
 
             assert!(!changes.lines.is_empty());
         }
 
         #[test]
         fn lines_should_be_sorted_by_line_num_desc() {
-            let term = ".";
+            let changes_requested = mock_wanted_changes(".");
             let file_data = valid_file_data();
-            let changes = FileChanges::from_file_data(&file_data, term);
+            let changes = FileChanges::from_file_data(&file_data, &changes_requested);
 
             assert!(!changes.lines.is_empty());
             assert!(changes.lines.iter().is_sorted());
@@ -171,9 +194,9 @@ mod tests {
 
         #[test]
         fn should_not_have_any_duplicate_lines() {
-            let term = " ";
+            let changes_requested = mock_wanted_changes(" ");
             let file_data = valid_file_data();
-            let changes = FileChanges::from_file_data(&file_data, term);
+            let changes = FileChanges::from_file_data(&file_data, &changes_requested);
 
             assert!(!changes.lines.is_empty());
             let mut line_set = HashSet::new();
@@ -291,7 +314,8 @@ struct FileChanges {
 }
 
 impl FileChanges {
-    fn from_file_data(file_data: &FileData, term: &str) -> Self {
+    fn from_file_data(file_data: &FileData, changes_requested: &WantedChanges) -> Self {
+        let old_term = &changes_requested.old;
         let mut line_set = HashSet::new();
         file_data.term_containing_lines.iter().for_each(|line_num| {
             let half_offset: usize = 2;
@@ -305,8 +329,8 @@ impl FileChanges {
                 .skip(start_index)
                 .take(full_offset)
                 .for_each(|line| {
-                    let has_term = line.contains(term);
-                    let contents = ChangeContents::from_line(&line, term, has_term);
+                    let has_term = line.contains(old_term);
+                    let contents = ChangeContents::from_line(&line, old_term, has_term);
                     let num = line_num;
                     line_num += 1;
                     let parsed_line = ParsedLine {
