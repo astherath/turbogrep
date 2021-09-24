@@ -174,7 +174,7 @@ mod tests {
         #[test]
         fn should_be_able_to_create_from_file_data() {
             let changes_requested = mock_wanted_changes(" ", " ");
-            let file_data = valid_file_data();
+            let file_data = valid_file_data(&changes_requested.old);
             let changes = FileChanges::from_file_data(&file_data, &changes_requested);
 
             assert!(!changes.lines.is_empty());
@@ -182,14 +182,32 @@ mod tests {
 
         #[test]
         fn lines_should_be_sorted_by_line_num_desc() {
-            let changes_requested = mock_wanted_changes(" ", " ");
-            let file_data = valid_file_data();
+            let changes_requested = mock_wanted_changes("2018", "2021");
+            let file_data = valid_file_data(&changes_requested.old);
             let changes = FileChanges::from_file_data(&file_data, &changes_requested);
 
             assert!(!changes.lines.is_empty());
             assert!(changes.lines.iter().is_sorted());
-            println!("changes: {}", changes);
-            panic!()
+        }
+
+        #[test]
+        fn number_of_lines_with_term_should_match() {
+            // "[package]" is only present on one line in Cargo.toml by definition
+            let changes_requested = mock_wanted_changes("[package]", " ");
+            let file_data = valid_file_data(&changes_requested.old);
+            let changes = FileChanges::from_file_data(&file_data, &changes_requested);
+
+            assert!(!changes.lines.is_empty());
+            assert_eq!(
+                changes
+                    .lines
+                    .into_iter()
+                    .filter(|line| line.has_term)
+                    .collect::<Vec<ParsedLine>>()
+                    .len(),
+                1,
+                "should be exactly one matching element in list"
+            );
         }
 
         #[test]
@@ -197,7 +215,7 @@ mod tests {
             let old = "=";
             let new = "+";
             let changes_requested = mock_wanted_changes(&old, &new);
-            let file_data = valid_file_data();
+            let file_data = valid_file_data(&changes_requested.old);
             let changes = FileChanges::from_file_data(&file_data, &changes_requested);
 
             assert!(!changes.lines.is_empty());
@@ -218,7 +236,7 @@ mod tests {
         #[test]
         fn should_not_have_any_duplicate_lines() {
             let changes_requested = mock_wanted_changes(" ", " ");
-            let file_data = valid_file_data();
+            let file_data = valid_file_data(&changes_requested.old);
             let changes = FileChanges::from_file_data(&file_data, &changes_requested);
 
             assert!(!changes.lines.is_empty());
@@ -238,12 +256,11 @@ mod tests {
         result.unwrap()
     }
 
-    fn valid_file_data() -> FileData {
+    fn valid_file_data(term: &str) -> FileData {
         let path = Path::new("Cargo.toml");
-        let statement_to_find = " ";
 
         unwrap_and_check_ok(
-            read_file_data_and_check_for_match(&path, statement_to_find),
+            read_file_data_and_check_for_match(&path, term),
             "reading file data for valid path should not return err",
         )
         .expect("should not be none with valid path and term")
