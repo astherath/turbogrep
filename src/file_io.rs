@@ -148,11 +148,13 @@ mod tests {
 
         #[test]
         fn should_be_able_to_create_from_file_data() {
-            let term = " ";
+            let term = "=";
             let file_data = valid_file_data();
             let changes = FileChanges::from_file_data(&file_data, term);
 
-            assert!(!changes.lines.is_empty())
+            assert!(!changes.lines.is_empty());
+            println!("changes: {:?}", changes);
+            assert!(false);
         }
     }
 
@@ -208,12 +210,14 @@ fn read_file_data_and_check_for_match(
     })
 }
 
+#[derive(Debug)]
 struct ParsedLine {
     pub num: usize,
     pub has_term: bool,
     pub contents: String,
 }
 
+#[derive(Debug)]
 struct FileChanges {
     lines: Vec<ParsedLine>,
 }
@@ -228,15 +232,16 @@ impl FileChanges {
                 let full_offset = (half_offset * 2) + 1;
                 let start_index = line_num.checked_sub(half_offset).unwrap_or(0);
                 // we only want to take a few lines surrounding the painted one
-                let mut line_num = 1;
+                let mut line_num = start_index;
                 file_data
                     .contents
                     .iter()
                     .skip(start_index)
+                    .take(full_offset)
                     .map(|line| {
                         let has_term = line.contains(term);
                         let contents = match has_term {
-                            true => highlight_term_in_line(line, term),
+                            true => line_with_term_highlighted(line, term),
                             false => line.to_string(),
                         };
                         let num = line_num;
@@ -252,7 +257,7 @@ impl FileChanges {
             .flatten()
             .collect();
 
-        fn highlight_term_in_line(line: &str, term: &str) -> String {
+        fn line_with_term_highlighted(line: &str, term: &str) -> String {
             let colored_string = Colour::Red.paint(term);
             line.replace(term, &colored_string)
         }
