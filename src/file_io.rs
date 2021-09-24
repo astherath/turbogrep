@@ -24,7 +24,11 @@ impl WantedChanges {
 
 fn print_file_path_header_to_console(file_path: &Path) {
     let separator = "-".repeat(80);
-    println!("{}\n\nFile: \"{:?}\"\n{}", separator, &file_path, separator);
+    println!("\nFile: \"{:?}\"\n{}", &file_path, separator);
+}
+
+fn print_changes_to_be_made(changes_to_be_made: &FileChanges) {
+    println!("{}", changes_to_be_made);
 }
 
 pub fn execute(user_input: UserInput) -> io::Result<()> {
@@ -41,9 +45,9 @@ pub fn execute(user_input: UserInput) -> io::Result<()> {
         if let Some(file_data) = possible_data {
             print_file_path_header_to_console(file_path);
             let changes_to_be_made = FileChanges::from_file_data(&file_data, &changes_requested);
-            println!("{}", &changes_to_be_made);
+            print_changes_to_be_made(&changes_to_be_made);
             if !user_input.dry_run {
-                execute_changes_to_file(&file_data, changes_to_be_made)?;
+                execute_changes_to_file(file_data, changes_to_be_made)?;
             }
         }
     }
@@ -410,7 +414,7 @@ impl fmt::Display for FileChanges {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(
             f,
-            "{}",
+            "{}\n",
             self.lines
                 .iter()
                 .map(|line| line.to_string())
@@ -420,7 +424,21 @@ impl fmt::Display for FileChanges {
     }
 }
 
-fn execute_changes_to_file(file_data: &FileData, changes: FileChanges) -> io::Result<()> {
+fn execute_changes_to_file(mut file_data: FileData, changes: FileChanges) -> io::Result<()> {
+    changes
+        .lines
+        .into_iter()
+        .filter(|line| line.has_term)
+        .map(|line| (line.num, line.contents))
+        .for_each(|x| {
+            let num = x.0;
+            let replaced_line = x.1.new.unwrap();
+            file_data.contents[num] = replaced_line;
+        });
+
+    // write file data
+    let contents = file_data.contents.join("\n");
+    fs::write(file_data.file_path, contents.as_bytes())?;
     Ok(())
 }
 
