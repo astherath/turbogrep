@@ -1,6 +1,6 @@
 use super::commands::UserInput;
+use ansi_term::Colour;
 use glob;
-use std::cmp;
 use std::fmt;
 use std::fs::{self, File};
 use std::io::{self, BufRead};
@@ -143,9 +143,33 @@ mod tests {
         }
     }
 
+    mod file_changes {
+        use super::*;
+
+        #[test]
+        fn should_be_able_to_create_from_file_data() {
+            let term = " ";
+            let file_data = valid_file_data();
+            let changes = FileChanges::from_file_data(&file_data, term);
+
+            assert!(!changes.lines.is_empty())
+        }
+    }
+
     fn unwrap_and_check_ok<T>(result: io::Result<T>, assert_msg: &str) -> T {
         assert!(result.is_ok(), "{}", assert_msg);
         result.unwrap()
+    }
+
+    fn valid_file_data() -> FileData {
+        let path = Path::new("Cargo.toml");
+        let statement_to_find = " ";
+
+        unwrap_and_check_ok(
+            read_file_data_and_check_for_match(&path, statement_to_find),
+            "reading file data for valid path should not return err",
+        )
+        .expect("should not be none with valid path and term")
     }
 }
 
@@ -184,44 +208,54 @@ fn read_file_data_and_check_for_match(
     })
 }
 
-struct FileChanges {
-    lines: Vec<ParsedLine>,
-}
-
 struct ParsedLine {
     pub num: usize,
     pub has_term: bool,
     pub contents: String,
 }
 
-mod file_changes {
-    // #[test]
-    // fn
+struct FileChanges {
+    lines: Vec<ParsedLine>,
 }
 
 impl FileChanges {
     fn from_file_data(file_data: &FileData, term: &str) -> Self {
-        file_data.term_containing_lines.iter().for_each(|line_num| {
-            let offset = 2;
-            let start_index = cmp::max(line_num - 2, 0);
-            let lines = file_data.contents.iter().nth(start_index);
-        });
-        let mut line_num = 1;
         let lines = file_data
-            .contents
+            .term_containing_lines
             .iter()
-            .nth(2)
-            .map(|line| {
-                let has_term = line.contains(term);
-                let num = line_num;
-                line_num += 1;
-                ParsedLine {
-                    has_term,
-                    num,
-                    contents: line.to_string(),
-                }
+            .map(|line_num| {
+                let half_offset: usize = 2;
+                let full_offset = (half_offset * 2) + 1;
+                let start_index = line_num.checked_sub(half_offset).unwrap_or(0);
+                // we only want to take a few lines surrounding the painted one
+                let mut line_num = 1;
+                file_data
+                    .contents
+                    .iter()
+                    .skip(start_index)
+                    .map(|line| {
+                        let has_term = line.contains(term);
+                        let contents = match has_term {
+                            true => highlight_term_in_line(line, term),
+                            false => line.to_string(),
+                        };
+                        let num = line_num;
+                        line_num += 1;
+                        ParsedLine {
+                            has_term,
+                            num,
+                            contents,
+                        }
+                    })
+                    .collect::<Vec<ParsedLine>>()
             })
+            .flatten()
             .collect();
+
+        fn highlight_term_in_line(line: &str, term: &str) -> String {
+            let colored_string = Colour::Red.paint(term);
+            line.replace(term, &colored_string)
+        }
 
         Self { lines }
     }
