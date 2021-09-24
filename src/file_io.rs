@@ -167,7 +167,7 @@ mod tests {
         fn mock_wanted_changes(term: &str) -> WantedChanges {
             WantedChanges {
                 old: term.to_string(),
-                new: "".to_string(),
+                new: "+".to_string(),
             }
         }
 
@@ -182,7 +182,7 @@ mod tests {
 
         #[test]
         fn lines_should_be_sorted_by_line_num_desc() {
-            let changes_requested = mock_wanted_changes(".");
+            let changes_requested = mock_wanted_changes("=");
             let file_data = valid_file_data();
             let changes = FileChanges::from_file_data(&file_data, &changes_requested);
 
@@ -277,13 +277,19 @@ struct ChangeContents {
 }
 
 impl ChangeContents {
-    fn from_line(line: &str, term: &str, has_term: bool) -> Self {
-        let old = line_with_term_highlighted(line, term, Color::Red);
-        let new = match has_term {
-            true => Some(line_with_term_highlighted(line, term, Color::Green)),
-            false => None,
-        };
-        Self { old, new }
+    fn from_line(line: &str, changes_requested: &WantedChanges, has_term: bool) -> Self {
+        let old = &changes_requested.old;
+        let new = &changes_requested.new;
+        match has_term {
+            true => Self {
+                old: replace_terms_and_highlight(line, old, old, Color::Red),
+                new: Some(replace_terms_and_highlight(line, old, new, Color::Green)),
+            },
+            false => Self {
+                old: line.to_string(),
+                new: None,
+            },
+        }
     }
 }
 
@@ -297,9 +303,9 @@ impl fmt::Display for ChangeContents {
     }
 }
 
-fn line_with_term_highlighted(line: &str, term: &str, highlight_color: Color) -> String {
-    let colored_string = highlight_color.paint(term).to_string();
-    line.replace(term, &colored_string)
+fn replace_terms_and_highlight(line: &str, old: &str, new: &str, highlight_color: Color) -> String {
+    let colored_string = highlight_color.paint(new).to_string();
+    line.replace(old, &colored_string)
 }
 
 impl Ord for ParsedLine {
@@ -330,7 +336,7 @@ impl FileChanges {
                 .take(full_offset)
                 .for_each(|line| {
                     let has_term = line.contains(old_term);
-                    let contents = ChangeContents::from_line(&line, old_term, has_term);
+                    let contents = ChangeContents::from_line(&line, changes_requested, has_term);
                     let num = line_num;
                     line_num += 1;
                     let parsed_line = ParsedLine {
