@@ -164,16 +164,16 @@ mod tests {
     mod file_changes {
         use super::*;
 
-        fn mock_wanted_changes(term: &str) -> WantedChanges {
+        fn mock_wanted_changes(old: &str, new: &str) -> WantedChanges {
             WantedChanges {
-                old: term.to_string(),
-                new: "+".to_string(),
+                old: old.to_string(),
+                new: new.to_string(),
             }
         }
 
         #[test]
         fn should_be_able_to_create_from_file_data() {
-            let changes_requested = mock_wanted_changes("=");
+            let changes_requested = mock_wanted_changes(" ", " ");
             let file_data = valid_file_data();
             let changes = FileChanges::from_file_data(&file_data, &changes_requested);
 
@@ -182,7 +182,7 @@ mod tests {
 
         #[test]
         fn lines_should_be_sorted_by_line_num_desc() {
-            let changes_requested = mock_wanted_changes("=");
+            let changes_requested = mock_wanted_changes(" ", " ");
             let file_data = valid_file_data();
             let changes = FileChanges::from_file_data(&file_data, &changes_requested);
 
@@ -193,8 +193,31 @@ mod tests {
         }
 
         #[test]
+        fn changes_should_represent_old_and_new_terms() {
+            let old = "=";
+            let new = "+";
+            let changes_requested = mock_wanted_changes(&old, &new);
+            let file_data = valid_file_data();
+            let changes = FileChanges::from_file_data(&file_data, &changes_requested);
+
+            assert!(!changes.lines.is_empty());
+            assert!(
+                changes.lines.iter().all(|line| {
+                    if let Some(new_term) = &line.contents.new.as_ref() {
+                        let old_is_present = line.contents.old.contains(&old);
+                        let new_is_present = !new_term.contains(&old) && new_term.contains(&new);
+                        old_is_present && new_is_present
+                    } else {
+                        true
+                    }
+                }),
+                "old and new terms from changes should match wanted changes"
+            );
+        }
+
+        #[test]
         fn should_not_have_any_duplicate_lines() {
-            let changes_requested = mock_wanted_changes(" ");
+            let changes_requested = mock_wanted_changes(" ", " ");
             let file_data = valid_file_data();
             let changes = FileChanges::from_file_data(&file_data, &changes_requested);
 
@@ -205,8 +228,7 @@ mod tests {
                 .into_iter()
                 // HashSet.insert() returns false if no insert happened,
                 // meaning that there was a duplicate entry.
-                .map(|line| line_set.insert(line))
-                .all(|x| x);
+                .all(|line| line_set.insert(line));
             assert!(all_lines_inserted_non_dupe);
         }
     }
