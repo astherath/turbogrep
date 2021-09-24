@@ -233,9 +233,18 @@ mod tests {
             assert!(
                 changes.lines.iter().all(|line| {
                     if let Some(new_term) = &line.contents.new.as_ref() {
-                        let old_is_present = line.contents.old.contains(&old);
-                        let new_is_present = !new_term.contains(&old) && new_term.contains(&new);
-                        old_is_present && new_is_present
+                        let old_is_ok = line.contents.old.contains(&old);
+                        let new_is_ok = new_term.1
+                            == line
+                                .contents
+                                .old
+                                .replace(&Color::Red.paint(old).to_string(), &new);
+                        println!(
+                            ";;;: {}, {}",
+                            new_term.1,
+                            line.contents.old.replace(&old, &new)
+                        );
+                        old_is_ok && new_is_ok
                     } else {
                         true
                     }
@@ -323,7 +332,7 @@ struct ParsedLine {
 #[derive(Debug, Eq, PartialEq, Hash, PartialOrd)]
 struct ChangeContents {
     old: String,
-    new: Option<String>,
+    new: Option<(String, String)>,
 }
 
 impl ChangeContents {
@@ -333,7 +342,10 @@ impl ChangeContents {
         match has_term {
             true => Self {
                 old: replace_terms_and_highlight(line, old, old, Color::Red),
-                new: Some(replace_terms_and_highlight(line, old, new, Color::Green)),
+                new: Some((
+                    replace_terms_and_highlight(line, old, new, Color::Green),
+                    line.replace(old, new),
+                )),
             },
             false => Self {
                 old: line.to_string(),
@@ -347,7 +359,7 @@ impl fmt::Display for ChangeContents {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let mut display_string = format!("{}", &self.old);
         if let Some(new) = &self.new {
-            display_string.push_str(&format!(" -> {}", new))
+            display_string.push_str(&format!(" -> {}", new.0))
         }
         write!(f, "{}", display_string)
     }
@@ -433,7 +445,7 @@ fn execute_changes_to_file(mut file_data: FileData, changes: FileChanges) -> io:
         .for_each(|x| {
             let num = x.0;
             let replaced_line = x.1.new.unwrap();
-            file_data.contents[num] = replaced_line;
+            file_data.contents[num] = replaced_line.1;
         });
 
     // write file data
