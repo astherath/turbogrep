@@ -31,10 +31,10 @@ fn print_changes_to_be_made(changes_to_be_made: &FileChanges) {
     println!("{}", changes_to_be_made);
 }
 
-fn print_current_counters(files_seen: &u32, files_touched: &u32) {
+fn print_current_counters(files_seen: &u32, files_changed: &u32) {
     println!(
         "files seen: {}, files changed: {}...",
-        files_seen, files_touched
+        files_seen, files_changed
     );
 }
 
@@ -45,7 +45,7 @@ pub fn execute(user_input: UserInput) -> io::Result<()> {
     let changes_requested = WantedChanges::from_user_input(&user_input);
 
     let mut files_seen = 0;
-    let mut files_touched = 0;
+    let mut files_changed = 0;
 
     for file_path in file_paths.iter() {
         files_seen += 1;
@@ -56,13 +56,14 @@ pub fn execute(user_input: UserInput) -> io::Result<()> {
             if !user_input.silent {
                 print_file_path_header_to_console(file_path);
                 print_changes_to_be_made(&changes_to_be_made);
-                print_current_counters(&files_seen, &files_touched);
             }
 
             if !user_input.dry_run {
-                files_touched += 1;
+                files_changed += 1;
                 execute_changes_to_file(file_data, changes_to_be_made)?;
             }
+
+            print_current_counters(&files_seen, &files_changed);
         }
     }
 
