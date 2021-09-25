@@ -32,14 +32,11 @@ fn print_changes_to_be_made(changes_to_be_made: &FileChanges) {
 }
 
 pub fn execute(user_input: UserInput) -> io::Result<()> {
-    // read every file (one at a time) if it matches the pattern
-
     let init_path = Path::new(".");
     let file_paths = get_file_paths_that_match_expr(&user_input.pattern_string, &init_path)?;
 
     let changes_requested = WantedChanges::from_user_input(&user_input);
 
-    // print (nicely) the name of the file and the prev/next
     for file_path in file_paths.iter() {
         let possible_data = read_file_data_and_check_for_match(file_path, &changes_requested.old)?;
         if let Some(file_data) = possible_data {
@@ -53,12 +50,6 @@ pub fn execute(user_input: UserInput) -> io::Result<()> {
             }
         }
     }
-
-    // print line contents, line number, and strikethrough (in red) the old word and add next to it (green) the new word
-
-    // if not --dry-run, then make the swap
-
-    // return ok
 
     Ok(())
 }
