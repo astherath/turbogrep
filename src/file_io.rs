@@ -43,9 +43,11 @@ pub fn execute(user_input: UserInput) -> io::Result<()> {
     for file_path in file_paths.iter() {
         let possible_data = read_file_data_and_check_for_match(file_path, &changes_requested.old)?;
         if let Some(file_data) = possible_data {
-            print_file_path_header_to_console(file_path);
             let changes_to_be_made = FileChanges::from_file_data(&file_data, &changes_requested);
-            print_changes_to_be_made(&changes_to_be_made);
+            if !user_input.silent {
+                print_file_path_header_to_console(file_path);
+                print_changes_to_be_made(&changes_to_be_made);
+            }
             if !user_input.dry_run {
                 execute_changes_to_file(file_data, changes_to_be_made)?;
             }
