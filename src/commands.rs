@@ -43,10 +43,9 @@ impl<'a> ClapArg<'a> for UserInput {
                 .short("d")
                 .multiple(false)
                 .required(false)
-                .conflicts_with("silent")
                 ,
             Arg::with_name("silent")
-                .help("if set, does not print out any output (overrides dry-run flag)")
+                .help("if set, does not print out any output except the final files seen/changed count")
                 .long("silent")
                 .short("s")
                 .multiple(false)
@@ -166,17 +165,16 @@ mod test {
     }
 
     #[test]
-    fn silent_flag_should_conflict_with_dry_run_flag() {
+    fn silent_flag_should_not_conflict_with_dry_run_flag() {
         let mut input = get_required_input_arg_values();
         input.push("--dry-run");
         input.push("--silent");
 
         let matches_result = get_matches_for_input(input);
-        assert!(matches_result.is_err());
-        assert_eq!(
-            matches_result.err().unwrap().kind,
-            ErrorKind::ArgumentConflict
-        );
+        assert!(matches_result.is_ok());
+        let user_input = UserInput::from_matches(&matches_result.unwrap()).unwrap();
+        assert!(user_input.dry_run);
+        assert!(user_input.silent);
     }
 
     #[test]

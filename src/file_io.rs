@@ -62,10 +62,10 @@ pub fn execute(user_input: UserInput) -> io::Result<()> {
                 files_changed += 1;
                 execute_changes_to_file(file_data, changes_to_be_made)?;
             }
-
-            print_current_counters(&files_seen, &files_changed);
         }
     }
+
+    print_current_counters(&files_seen, &files_changed);
 
     Ok(())
 }
