@@ -8,6 +8,7 @@ pub struct UserInput {
     pub old_term: String,
     pub new_term: String,
     pub dry_run: bool,
+    pub silent: bool,
 }
 
 pub trait ClapArg<'a> {
@@ -39,7 +40,15 @@ impl<'a> ClapArg<'a> for UserInput {
             Arg::with_name("dry-run")
                 .help("if set, does not execute the final step of replacing the matching terms in the files")
                 .long("dry-run")
-                .short("dry")
+                .short("d")
+                .multiple(false)
+                .required(false)
+                .conflicts_with("silent")
+                ,
+            Arg::with_name("silent")
+                .help("if set, does not print out any output (overrides dry-run flag)")
+                .long("silent")
+                .short("s")
                 .multiple(false)
                 .required(false)
         ]
@@ -83,6 +92,11 @@ impl<'a> ClapArg<'a> for UserInput {
             |mut this, matches| {
                 let arg_name = "dry-run";
                 this.dry_run = matches.is_present(arg_name);
+                this
+            },
+            |mut this, matches| {
+                let arg_name = "silent";
+                this.silent = matches.is_present(arg_name);
                 this
             },
         ]
@@ -131,11 +145,38 @@ mod test {
     #[test]
     fn optional_dry_run_arg_should_work() {
         let mut input = get_required_input_arg_values();
-        input.push("--dry-run=true");
+        input.push("--dry-run");
 
         let matches_result = get_matches_for_input(input);
         assert!(matches_result.is_ok());
         assert!(check_matches_valid(matches_result.unwrap()));
+    }
+
+    #[test]
+    fn optional_silent_flag_should_work() {
+        let mut input = get_required_input_arg_values();
+        input.push("--silent");
+
+        let matches_result = get_matches_for_input(input);
+        assert!(matches_result.is_ok());
+
+        let user_input = UserInput::from_matches(&matches_result.unwrap()).unwrap();
+        assert!(!user_input.dry_run);
+        assert!(user_input.silent);
+    }
+
+    #[test]
+    fn silent_flag_should_conflict_with_dry_run_flag() {
+        let mut input = get_required_input_arg_values();
+        input.push("--dry-run");
+        input.push("--silent");
+
+        let matches_result = get_matches_for_input(input);
+        assert!(matches_result.is_err());
+        assert_eq!(
+            matches_result.err().unwrap().kind,
+            ErrorKind::ArgumentConflict
+        );
     }
 
     #[test]
