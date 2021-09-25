@@ -200,16 +200,6 @@ mod tests {
             assert!(!changes.lines.is_empty());
         }
 
-        // #[test]
-        // fn lines_should_be_sorted_by_line_num_desc() {
-        // let changes_requested = mock_wanted_changes("2018", "2021");
-        // let file_data = valid_file_data(&changes_requested.old);
-        // let changes = FileChanges::from_file_data(&file_data, &changes_requested);
-
-        // assert!(!changes.lines.is_empty());
-        // assert!(changes.lines.iter().is_sorted());
-        // }
-
         #[test]
         fn number_of_lines_with_term_should_match() {
             // "[package]" is only present on one line in Cargo.toml by definition
