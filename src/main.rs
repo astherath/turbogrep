@@ -1,4 +1,3 @@
-#![feature(is_sorted)]
 use clap::App;
 mod commands;
 pub use commands::{ClapArg, UserInput};
