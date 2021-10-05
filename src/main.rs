@@ -1,5 +1,8 @@
 use clap::App;
 mod commands;
+mod common;
+mod console_printer;
+mod dir_walker;
 pub use commands::{ClapArg, UserInput};
 mod file_io;
 

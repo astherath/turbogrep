@@ -1,10 +1,9 @@
 use super::commands::UserInput;
+use super::{console_printer, dir_walker};
 use ansi_term::Color;
-use glob;
 use std::cmp::{Ord, Ordering};
 use std::collections::HashSet;
 use std::fmt;
-use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
 
@@ -22,30 +21,10 @@ impl WantedChanges {
     }
 }
 
-mod console_printer {
-    use super::FileChanges;
-    use std::path::Path;
-
-    pub fn print_file_path_header_to_console(file_path: &Path) {
-        let separator = "-".repeat(80);
-        println!("\nFile: \"{:?}\"\n{}", &file_path, separator);
-    }
-
-    pub fn print_changes_to_be_made(changes_to_be_made: &FileChanges) {
-        println!("{}", changes_to_be_made);
-    }
-
-    pub fn print_current_counters(files_seen: &u32, files_changed: &u32) {
-        println!(
-            "files seen: {}, files changed: {}...",
-            files_seen, files_changed
-        );
-    }
-}
-
 pub fn execute(user_input: UserInput) -> io::Result<()> {
     let init_path = Path::new(".");
-    let file_paths = get_file_paths_that_match_expr(&user_input.pattern_string, &init_path)?;
+    let file_paths =
+        dir_walker::get_file_paths_that_match_expr(&user_input.pattern_string, &init_path)?;
 
     let changes_requested = WantedChanges::from_user_input(&user_input);
 
@@ -75,51 +54,12 @@ pub fn execute(user_input: UserInput) -> io::Result<()> {
 
     Ok(())
 }
-
-mod dir_walker {}
-
-fn get_file_paths_that_match_expr(expr: &str, starting_path: &Path) -> io::Result<Vec<PathBuf>> {
-    let matches_pattern = |path: &Path| -> bool {
-        let pattern = match glob::Pattern::new(expr) {
-            Ok(re) => re,
-            Err(error) => clap_panic(error),
-        };
-        pattern.matches_path(path)
-    };
-
-    let mut valid_paths = vec![];
-    let mut add_file_to_list = |file_path: &fs::DirEntry| {
-        if matches_pattern(&file_path.path()) {
-            let full_path = file_path.path();
-            valid_paths.push(full_path);
-        }
-    };
-
-    fn visit_dirs(dir: &Path, cb: &mut dyn FnMut(&fs::DirEntry)) -> io::Result<()> {
-        if dir.is_dir() {
-            for entry in fs::read_dir(dir)? {
-                let entry = entry?;
-                let path = entry.path();
-                if path.is_dir() {
-                    visit_dirs(&path, cb)?;
-                } else {
-                    cb(&entry);
-                }
-            }
-        }
-        Ok(())
-    }
-
-    visit_dirs(&starting_path, &mut add_file_to_list)?;
-
-    Ok(valid_paths)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
     mod dir_file_walker {
+        use super::dir_walker::*;
         use super::*;
 
         #[test]
@@ -469,12 +409,4 @@ mod file_io {
         fs::write(file_data.file_path, contents.as_bytes())?;
         Ok(())
     }
-}
-
-fn clap_panic<T: fmt::Display>(details: T) -> ! {
-    clap::Error::with_description(
-        &format!("Error processing command. Details: {}", details),
-        clap::ErrorKind::InvalidValue,
-    )
-    .exit()
 }
