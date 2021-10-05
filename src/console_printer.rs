@@ -1,4 +1,4 @@
-use super::file_io::FileChanges;
+use super::file_changes::FileChanges;
 use std::path::Path;
 
 pub fn print_file_path_header_to_console(file_path: &Path) {

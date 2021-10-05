@@ -3,6 +3,7 @@ mod commands;
 mod common;
 mod console_printer;
 mod dir_walker;
+mod file_changes;
 pub use commands::{ClapArg, UserInput};
 mod file_io;
 
