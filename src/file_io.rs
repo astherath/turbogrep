@@ -4,11 +4,11 @@ use glob;
 use std::cmp::{Ord, Ordering};
 use std::collections::HashSet;
 use std::fmt;
-use std::fs::{self, File};
-use std::io::{self, BufRead};
+use std::fs;
+use std::io;
 use std::path::{Path, PathBuf};
 
-struct WantedChanges {
+pub struct WantedChanges {
     old: String,
     new: String,
 }
@@ -22,20 +22,25 @@ impl WantedChanges {
     }
 }
 
-fn print_file_path_header_to_console(file_path: &Path) {
-    let separator = "-".repeat(80);
-    println!("\nFile: \"{:?}\"\n{}", &file_path, separator);
-}
+mod console_printer {
+    use super::FileChanges;
+    use std::path::Path;
 
-fn print_changes_to_be_made(changes_to_be_made: &FileChanges) {
-    println!("{}", changes_to_be_made);
-}
+    pub fn print_file_path_header_to_console(file_path: &Path) {
+        let separator = "-".repeat(80);
+        println!("\nFile: \"{:?}\"\n{}", &file_path, separator);
+    }
 
-fn print_current_counters(files_seen: &u32, files_changed: &u32) {
-    println!(
-        "files seen: {}, files changed: {}...",
-        files_seen, files_changed
-    );
+    pub fn print_changes_to_be_made(changes_to_be_made: &FileChanges) {
+        println!("{}", changes_to_be_made);
+    }
+
+    pub fn print_current_counters(files_seen: &u32, files_changed: &u32) {
+        println!(
+            "files seen: {}, files changed: {}...",
+            files_seen, files_changed
+        );
+    }
 }
 
 pub fn execute(user_input: UserInput) -> io::Result<()> {
@@ -49,26 +54,29 @@ pub fn execute(user_input: UserInput) -> io::Result<()> {
 
     for file_path in file_paths.iter() {
         files_seen += 1;
-        let possible_data = read_file_data_and_check_for_match(file_path, &changes_requested.old)?;
+        let possible_data =
+            file_io::read_file_data_and_check_for_match(file_path, &changes_requested.old)?;
         if let Some(file_data) = possible_data {
             let changes_to_be_made = FileChanges::from_file_data(&file_data, &changes_requested);
 
             if !user_input.silent {
-                print_file_path_header_to_console(file_path);
-                print_changes_to_be_made(&changes_to_be_made);
+                console_printer::print_file_path_header_to_console(file_path);
+                console_printer::print_changes_to_be_made(&changes_to_be_made);
             }
 
             if !user_input.dry_run {
                 files_changed += 1;
-                execute_changes_to_file(file_data, changes_to_be_made)?;
+                file_io::execute_changes_to_file(file_data, changes_to_be_made)?;
             }
         }
     }
 
-    print_current_counters(&files_seen, &files_changed);
+    console_printer::print_current_counters(&files_seen, &files_changed);
 
     Ok(())
 }
+
+mod dir_walker {}
 
 fn get_file_paths_that_match_expr(expr: &str, starting_path: &Path) -> io::Result<Vec<PathBuf>> {
     let matches_pattern = |path: &Path| -> bool {
@@ -156,7 +164,7 @@ mod tests {
             let statement_to_find = " ";
 
             let some_lines = unwrap_and_check_ok(
-                read_file_data_and_check_for_match(&path, statement_to_find),
+                file_io::read_file_data_and_check_for_match(&path, statement_to_find),
                 "reading file data for valid path should not return err",
             );
 
@@ -173,7 +181,7 @@ mod tests {
             let nonexistent_statement = "nonexistent_substring".repeat(10);
 
             let lines = unwrap_and_check_ok(
-                read_file_data_and_check_for_match(&path, &nonexistent_statement),
+                file_io::read_file_data_and_check_for_match(&path, &nonexistent_statement),
                 "reading file data for valid path should not return err",
             );
 
@@ -279,57 +287,28 @@ mod tests {
         let path = Path::new("Cargo.toml");
 
         unwrap_and_check_ok(
-            read_file_data_and_check_for_match(&path, term),
+            file_io::read_file_data_and_check_for_match(&path, term),
             "reading file data for valid path should not return err",
         )
         .expect("should not be none with valid path and term")
     }
 }
 
-struct FileData {
+pub struct FileData {
     pub file_path: PathBuf,
     pub contents: Vec<String>,
     pub term_containing_lines: Vec<usize>,
 }
 
-fn read_file_data_and_check_for_match(
-    file_path: &Path,
-    statement_to_find: &str,
-) -> io::Result<Option<FileData>> {
-    let file = File::open(file_path)?;
-    let mut has_match = false;
-    let mut contents = vec![];
-    let mut term_containing_lines = vec![];
-
-    let mut line_num = 0;
-    for line in io::BufReader::new(file).lines().map(|x| x.unwrap()) {
-        if line.contains(statement_to_find) {
-            term_containing_lines.push(line_num);
-            has_match = true;
-        }
-        contents.push(line);
-        line_num += 1;
-    }
-
-    Ok(match has_match {
-        false => None,
-        true => Some(FileData {
-            file_path: file_path.to_path_buf(),
-            term_containing_lines,
-            contents,
-        }),
-    })
-}
-
 #[derive(Debug, Eq, PartialEq, Hash, PartialOrd)]
-struct ParsedLine {
+pub struct ParsedLine {
     pub num: usize,
     pub has_term: bool,
     pub contents: ChangeContents,
 }
 
 #[derive(Debug, Eq, PartialEq, Hash, PartialOrd)]
-struct ChangeContents {
+pub struct ChangeContents {
     old: String,
     new: Option<(String, String)>,
 }
@@ -376,7 +355,7 @@ impl Ord for ParsedLine {
 }
 
 #[derive(Debug, Eq, PartialEq, Hash)]
-struct FileChanges {
+pub struct FileChanges {
     lines: Vec<ParsedLine>,
 }
 
@@ -435,22 +414,61 @@ impl fmt::Display for FileChanges {
     }
 }
 
-fn execute_changes_to_file(mut file_data: FileData, changes: FileChanges) -> io::Result<()> {
-    changes
-        .lines
-        .into_iter()
-        .filter(|line| line.has_term)
-        .map(|line| (line.num, line.contents))
-        .for_each(|x| {
-            let num = x.0;
-            let replaced_line = x.1.new.unwrap();
-            file_data.contents[num] = replaced_line.1;
-        });
+mod file_io {
+    use super::{FileChanges, FileData};
+    use std::fs::{self, File};
+    use std::io::{self, BufRead};
+    use std::path::Path;
 
-    // write file data
-    let contents = file_data.contents.join("\n");
-    fs::write(file_data.file_path, contents.as_bytes())?;
-    Ok(())
+    pub fn read_file_data_and_check_for_match(
+        file_path: &Path,
+        statement_to_find: &str,
+    ) -> io::Result<Option<FileData>> {
+        let file = File::open(file_path)?;
+        let mut has_match = false;
+        let mut contents = vec![];
+        let mut term_containing_lines = vec![];
+
+        let mut line_num = 0;
+        for line in io::BufReader::new(file).lines().map(|x| x.unwrap()) {
+            if line.contains(statement_to_find) {
+                term_containing_lines.push(line_num);
+                has_match = true;
+            }
+            contents.push(line);
+            line_num += 1;
+        }
+
+        Ok(match has_match {
+            false => None,
+            true => Some(FileData {
+                file_path: file_path.to_path_buf(),
+                term_containing_lines,
+                contents,
+            }),
+        })
+    }
+
+    pub fn execute_changes_to_file(
+        mut file_data: FileData,
+        changes: FileChanges,
+    ) -> io::Result<()> {
+        changes
+            .lines
+            .into_iter()
+            .filter(|line| line.has_term)
+            .map(|line| (line.num, line.contents))
+            .for_each(|x| {
+                let num = x.0;
+                let replaced_line = x.1.new.unwrap();
+                file_data.contents[num] = replaced_line.1;
+            });
+
+        // write file data
+        let contents = file_data.contents.join("\n");
+        fs::write(file_data.file_path, contents.as_bytes())?;
+        Ok(())
+    }
 }
 
 fn clap_panic<T: fmt::Display>(details: T) -> ! {
