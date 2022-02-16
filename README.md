@@ -25,3 +25,18 @@ ARGS:
 
 Without the help of an IDE, it's hard and annoying to have to write scripts to refactor large directories at once while previewing the changes to be made,
 which hopefully is the niche that `turbogrep` fills.
+
+
+
+## Module layout
+
+![image-20220216165814959](/Users/felipearce/Library/Application Support/typora-user-images/image-20220216165814959.png)
+
+
+
+### Control flow summary 
+
+- Main invokes the CLI to get input args (file, directory, flags, search term, etc.)
+- CLI mod invokes the file parser in order to read the correct files 
+  - the file parser invoker is responsible for handling things such as nested directories, non-readable files, etc.
+- The file parser mod then groups all of the data into a struct that can be processed by the console printer

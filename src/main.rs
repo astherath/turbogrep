@@ -1,18 +1,8 @@
-use clap::App;
-mod commands;
-mod common;
+mod cli;
 mod console_printer;
-mod dir_walker;
-mod file_changes;
-pub use commands::{ClapArg, UserInput};
-mod file_io;
-
+mod errors;
+mod file_parser;
+mod parser_invoker;
 fn main() {
-    let args = UserInput::get_args();
-    let matches = args
-        .into_iter()
-        .fold(App::new("turbogrep"), |acc, arg| acc.arg(arg))
-        .get_matches();
-    let user_input = UserInput::from_matches(&matches).unwrap();
-    file_io::execute(user_input).unwrap();
+    cli::run_main().expect("main cli fn failed");
 }
