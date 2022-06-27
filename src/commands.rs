@@ -5,8 +5,9 @@ type ParseResult<T> = Result<T, ()>;
 #[derive(Default, Debug)]
 pub struct UserInput {
     pub pattern_string: String,
-    pub old_term: String,
-    pub new_term: String,
+    pub term: String,
+    pub replace: bool,
+    pub replacement: Option<String>,
     pub dry_run: bool,
     pub silent: bool,
 }
@@ -27,14 +28,21 @@ impl<'a> ClapArg<'a> for UserInput {
                 .required(true)
                 .takes_value(true)
                 .index(1),
-            Arg::with_name("old")
-                .help("the (old) term currently present in the files to replace")
+            Arg::with_name("term")
+                .help("the term present in the files to find")
                 .required(true)
                 .takes_value(true)
                 .index(2),
-            Arg::with_name("new")
+            Arg::with_name("replace")
+                .help("if set, allows the user to set a new term that\
+                      will replace all found instances of the term to find")
+                .long("replace")
+                .short("r")
+                .multiple(false)
+                .required(false),
+            Arg::with_name("replacement")
                 .help("the (new) term to replace the old term with")
-                .required(true)
+                .requires("replace")
                 .takes_value(true)
                 .index(3),
             Arg::with_name("dry-run")
@@ -71,8 +79,8 @@ impl<'a> ClapArg<'a> for UserInput {
                 this
             },
             |mut this, matches| {
-                let arg_name = "old";
-                this.old_term = matches
+                let arg_name = "term";
+                this.term = matches
                     .value_of(arg_name)
                     .ok_or_else(|| panic_because_of_bad_parse())
                     .unwrap()
@@ -80,12 +88,14 @@ impl<'a> ClapArg<'a> for UserInput {
                 this
             },
             |mut this, matches| {
-                let arg_name = "new";
-                this.new_term = matches
-                    .value_of(arg_name)
-                    .ok_or_else(|| panic_because_of_bad_parse())
-                    .unwrap()
-                    .to_string();
+                let arg_name = "replace";
+                this.replace = matches.is_present(replace);
+                this
+            },
+            |mut this, matches| {
+                let arg_name = "replacement";
+                this.replacement = matches
+                    .value_of(arg_name);
                 this
             },
             |mut this, matches| {
