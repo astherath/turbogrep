@@ -13,8 +13,8 @@ pub struct WantedChanges {
 impl WantedChanges {
     pub fn from_user_input(user_input: &UserInput) -> Self {
         Self {
-            old: user_input.old_term.to_string(),
-            new: user_input.new_term.to_string(),
+            old: user_input.term.to_string(),
+            new: user_input.replacement.to_string(),
         }
     }
 }

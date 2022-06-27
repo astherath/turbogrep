@@ -89,13 +89,15 @@ impl<'a> ClapArg<'a> for UserInput {
             },
             |mut this, matches| {
                 let arg_name = "replace";
-                this.replace = matches.is_present(replace);
+                this.replace = matches.is_present(arg_name);
                 this
             },
             |mut this, matches| {
                 let arg_name = "replacement";
-                this.replacement = matches
-                    .value_of(arg_name);
+                this.replacement = match matches.value_of(arg_name) {
+                    Some(val) => Some(val.to_string()),
+                    None => None,
+                };
                 this
             },
             |mut this, matches| {
